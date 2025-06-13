@@ -1,0 +1,395 @@
+import os
+import random
+import hashlib
+
+class BasicImageEncryption:
+    """
+    Basic image encryption using only built-in Python libraries.
+    Works with simple PPM format images or can create sample images.
+    """
+    
+    def __init__(self):
+        pass
+    
+    def create_sample_image(self, filename, width=100, height=100):
+        """Create a simple PPM image for testing."""
+        try:
+            with open(filename, 'w') as f:
+                f.write(f"P3\n{width} {height}\n255\n")
+                
+                # Create a simple pattern
+                for y in range(height):
+                    for x in range(width):
+                        # Create a gradient pattern
+                        r = (x * 255) // width
+                        g = (y * 255) // height
+                        b = ((x + y) * 255) // (width + height)
+                        
+                        f.write(f"{r} {g} {b}\n")
+            
+            print(f"Sample image created: {filename}")
+            return True
+        except Exception as e:
+            print(f"Error creating sample image: {e}")
+            return False
+    
+    def read_ppm_image(self, filename):
+        """Read a simple PPM image file."""
+        try:
+            with open(filename, 'r') as f:
+                # Read header
+                magic = f.readline().strip()
+                if magic != 'P3':
+                    raise ValueError("Only P3 PPM format supported")
+                
+                # Skip comments
+                line = f.readline().strip()
+                while line.startswith('#'):
+                    line = f.readline().strip()
+                
+                # Get dimensions
+                width, height = map(int, line.split())
+                
+                # Get max color value
+                max_val = int(f.readline().strip())
+                
+                # Read pixel data
+                pixels = []
+                for line in f:
+                    values = line.strip().split()
+                    for i in range(0, len(values), 3):
+                        if i + 2 < len(values):
+                            r, g, b = int(values[i]), int(values[i+1]), int(values[i+2])
+                            pixels.append((r, g, b))
+                
+                return {
+                    'width': width,
+                    'height': height,
+                    'max_val': max_val,
+                    'pixels': pixels
+                }
+        
+        except Exception as e:
+            print(f"Error reading image: {e}")
+            return None
+    
+    def write_ppm_image(self, filename, image_data):
+        """Write a PPM image file."""
+        try:
+            with open(filename, 'w') as f:
+                f.write(f"P3\n")
+                f.write(f"{image_data['width']} {image_data['height']}\n")
+                f.write(f"{image_data['max_val']}\n")
+                
+                for i, (r, g, b) in enumerate(image_data['pixels']):
+                    f.write(f"{r} {g} {b}")
+                    if (i + 1) % image_data['width'] == 0:
+                        f.write("\n")
+                    else:
+                        f.write(" ")
+            
+            print(f"Image saved: {filename}")
+            return True
+        except Exception as e:
+            print(f"Error saving image: {e}")
+            return False
+    
+    def generate_key_from_password(self, password, length):
+        """Generate key sequence from password."""
+        seed = int(hashlib.md5(password.encode()).hexdigest(), 16) % (2**32)
+        random.seed(seed)
+        return [random.randint(0, 255) for _ in range(length)]
+    
+    def xor_encrypt_decrypt(self, image_data, password):
+        """XOR encryption/decryption."""
+        try:
+            pixels = image_data['pixels']
+            key_sequence = self.generate_key_from_password(password, len(pixels) * 3)
+            
+            encrypted_pixels = []
+            key_index = 0
+            
+            for r, g, b in pixels:
+                new_r = r ^ key_sequence[key_index]
+                new_g = g ^ key_sequence[key_index + 1]
+                new_b = b ^ key_sequence[key_index + 2]
+                
+                encrypted_pixels.append((new_r, new_g, new_b))
+                key_index += 3
+            
+            result = image_data.copy()
+            result['pixels'] = encrypted_pixels
+            return result
+        
+        except Exception as e:
+            print(f"Error in XOR encryption: {e}")
+            return None
+    
+    def math_encrypt(self, image_data, key_value, operation='add', decrypt=False):
+        """Mathematical encryption."""
+        try:
+            pixels = image_data['pixels']
+            encrypted_pixels = []
+            
+            for r, g, b in pixels:
+                if operation == 'add':
+                    if decrypt:
+                        new_r = (r - key_value) % 256
+                        new_g = (g - key_value) % 256
+                        new_b = (b - key_value) % 256
+                    else:
+                        new_r = (r + key_value) % 256
+                        new_g = (g + key_value) % 256
+                        new_b = (b + key_value) % 256
+                
+                elif operation == 'subtract':
+                    if decrypt:
+                        new_r = (r + key_value) % 256
+                        new_g = (g + key_value) % 256
+                        new_b = (b + key_value) % 256
+                    else:
+                        new_r = (r - key_value) % 256
+                        new_g = (g - key_value) % 256
+                        new_b = (b - key_value) % 256
+                
+                encrypted_pixels.append((new_r, new_g, new_b))
+            
+            result = image_data.copy()
+            result['pixels'] = encrypted_pixels
+            return result
+        
+        except Exception as e:
+            print(f"Error in math encryption: {e}")
+            return None
+    
+    def pixel_swap_encrypt(self, image_data, password):
+        """Pixel swapping encryption."""
+        try:
+            pixels = image_data['pixels'][:]
+            total_pixels = len(pixels)
+            
+            # Generate swap pattern
+            seed = int(hashlib.md5(password.encode()).hexdigest(), 16) % (2**32)
+            random.seed(seed)
+            
+            # Create swap pairs
+            swap_pairs = []
+            for i in range(0, total_pixels - 1, 2):
+                if i + 1 < total_pixels:
+                    swap_pairs.append((i, i + 1))
+            
+            random.shuffle(swap_pairs)
+            
+            # Perform swaps
+            for idx1, idx2 in swap_pairs:
+                pixels[idx1], pixels[idx2] = pixels[idx2], pixels[idx1]
+            
+            result = image_data.copy()
+            result['pixels'] = pixels
+            return result
+        
+        except Exception as e:
+            print(f"Error in pixel swap: {e}")
+            return None
+    
+    def channel_shift_encrypt(self, image_data, shift_amount, decrypt=False):
+        """Channel shifting encryption."""
+        try:
+            pixels = image_data['pixels']
+            shifted_pixels = []
+            
+            for r, g, b in pixels:
+                if not decrypt:
+                    # Forward shift
+                    for _ in range(shift_amount % 3):
+                        r, g, b = b, r, g
+                else:
+                    # Backward shift
+                    for _ in range(shift_amount % 3):
+                        r, g, b = g, b, r
+                
+                shifted_pixels.append((r, g, b))
+            
+            result = image_data.copy()
+            result['pixels'] = shifted_pixels
+            return result
+        
+        except Exception as e:
+            print(f"Error in channel shift: {e}")
+            return None
+
+
+def display_menu():
+    """Display main menu."""
+    print("\n" + "="*50)
+    print("    BASIC IMAGE ENCRYPTION TOOL")
+    print("      (No External Libraries)")
+    print("="*50)
+    print("1. Create Sample Image")
+    print("2. Encrypt Image")
+    print("3. Decrypt Image")
+    print("4. View Methods")
+    print("5. Exit")
+    print("="*50)
+
+
+def display_methods():
+    """Display encryption methods."""
+    print("\n" + "="*50)
+    print("         ENCRYPTION METHODS")
+    print("="*50)
+    print("1. XOR Encryption")
+    print("2. Mathematical Operations")
+    print("3. Pixel Swapping")
+    print("4. Channel Shifting")
+    print("="*50)
+
+
+def get_method():
+    """Get encryption method."""
+    methods = {'1': 'xor', '2': 'math', '3': 'swap', '4': 'channel'}
+    
+    print("\nSelect method:")
+    print("1. XOR Encryption")
+    print("2. Mathematical Operations")
+    print("3. Pixel Swapping")
+    print("4. Channel Shifting")
+    
+    choice = input("Enter choice (1-4): ").strip()
+    return methods.get(choice, 'xor')
+
+
+def main():
+    """Main program."""
+    encryptor = BasicImageEncryption()
+    
+    print("Welcome to Basic Image Encryption Tool!")
+    print("This tool works with PPM format images and uses only built-in Python libraries.")
+    print("\nNote: This tool works with .ppm image files (a simple text-based format)")
+    print("You can create a sample image first to test the encryption.")
+    
+    while True:
+        display_menu()
+        choice = input("Enter your choice (1-5): ").strip()
+        
+        if choice == '1':  # Create sample
+            filename = input("Enter filename for sample image (e.g., sample.ppm): ").strip()
+            if not filename.endswith('.ppm'):
+                filename += '.ppm'
+            
+            try:
+                width = int(input("Enter width [default: 100]: ") or "100")
+                height = int(input("Enter height [default: 100]: ") or "100")
+            except ValueError:
+                width, height = 100, 100
+            
+            encryptor.create_sample_image(filename, width, height)
+        
+        elif choice == '2':  # Encrypt
+            filename = input("Enter PPM image filename: ").strip()
+            if not os.path.exists(filename):
+                print("File not found!")
+                continue
+            
+            image_data = encryptor.read_ppm_image(filename)
+            if not image_data:
+                continue
+            
+            method = get_method()
+            output_file = input("Enter output filename: ").strip()
+            if not output_file.endswith('.ppm'):
+                output_file += '.ppm'
+            
+            print(f"\n=== Encrypting with {method.upper()} ===")
+            
+            if method == 'xor':
+                password = input("Enter password: ")
+                result = encryptor.xor_encrypt_decrypt(image_data, password)
+            
+            elif method == 'math':
+                operation = input("Operation (add/subtract) [default: add]: ").lower()
+                if operation not in ['add', 'subtract']:
+                    operation = 'add'
+                try:
+                    key_value = int(input("Enter key value (1-255) [default: 50]: ") or "50")
+                except ValueError:
+                    key_value = 50
+                result = encryptor.math_encrypt(image_data, key_value, operation, decrypt=False)
+            
+            elif method == 'swap':
+                password = input("Enter password: ")
+                result = encryptor.pixel_swap_encrypt(image_data, password)
+            
+            elif method == 'channel':
+                try:
+                    shift = int(input("Enter shift amount (1-2) [default: 1]: ") or "1")
+                except ValueError:
+                    shift = 1
+                result = encryptor.channel_shift_encrypt(image_data, shift, decrypt=False)
+            
+            if result:
+                encryptor.write_ppm_image(output_file, result)
+                print("Encryption completed!")
+        
+        elif choice == '3':  # Decrypt
+            filename = input("Enter encrypted PPM image filename: ").strip()
+            if not os.path.exists(filename):
+                print("File not found!")
+                continue
+            
+            image_data = encryptor.read_ppm_image(filename)
+            if not image_data:
+                continue
+            
+            method = get_method()
+            output_file = input("Enter output filename: ").strip()
+            if not output_file.endswith('.ppm'):
+                output_file += '.ppm'
+            
+            print(f"\n=== Decrypting with {method.upper()} ===")
+            
+            if method == 'xor':
+                password = input("Enter password: ")
+                result = encryptor.xor_encrypt_decrypt(image_data, password)
+            
+            elif method == 'math':
+                operation = input("Operation used in encryption (add/subtract): ").lower()
+                if operation not in ['add', 'subtract']:
+                    print("Invalid operation!")
+                    continue
+                try:
+                    key_value = int(input("Enter key value used: "))
+                except ValueError:
+                    print("Invalid key value!")
+                    continue
+                result = encryptor.math_encrypt(image_data, key_value, operation, decrypt=True)
+            
+            elif method == 'swap':
+                password = input("Enter password used: ")
+                result = encryptor.pixel_swap_encrypt(image_data, password)
+            
+            elif method == 'channel':
+                try:
+                    shift = int(input("Enter shift amount used: "))
+                except ValueError:
+                    print("Invalid shift amount!")
+                    continue
+                result = encryptor.channel_shift_encrypt(image_data, shift, decrypt=True)
+            
+            if result:
+                encryptor.write_ppm_image(output_file, result)
+                print("Decryption completed!")
+        
+        elif choice == '4':  # View methods
+            display_methods()
+        
+        elif choice == '5':  # Exit
+            print("Thank you for using Basic Image Encryption Tool!")
+            break
+        
+        else:
+            print("Invalid choice!")
+
+
+if __name__ == "__main__":
+    main()
